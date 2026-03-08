@@ -1,6 +1,6 @@
 """
 TaxNow - GST Automation Platform
-FastAPI Backend
+FastAPI Backend with MongoDB & Cloudinary
 """
 
 import os
@@ -17,6 +17,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+
+# Import database and cloud storage
+try:
+    from database import Database, serialize_mongo_doc
+    from cloud_storage import CloudStorage
+    DB_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Database/Cloud import error: {e}")
+    DB_AVAILABLE = False
 
 # Import services
 try:
@@ -61,9 +70,24 @@ else:
     gst_engine = None
     return_generator = None
 
-# In-memory storage
+# In-memory storage (fallback if MongoDB not available)
 processed_data_store: Dict[str, Any] = {}
 purchase_data_store: Dict[str, Any] = {}
+
+
+# ==================== Startup/Shutdown Events ====================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connection on startup"""
+    if DB_AVAILABLE:
+        await Database.connect()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on shutdown"""
+    if DB_AVAILABLE:
+        await Database.disconnect()
 
 
 # ==================== Health & Info Endpoints ====================
@@ -76,19 +100,38 @@ async def root():
         "service": "TaxNow API",
         "version": "2.0.0",
         "timestamp": datetime.now().isoformat(),
-        "services_available": SERVICES_AVAILABLE
+        "services_available": SERVICES_AVAILABLE,
+        "database_available": DB_AVAILABLE,
+        "cloud_storage_available": CloudStorage.is_enabled() if DB_AVAILABLE else False
     }
 
 
 @app.get("/health")
 async def health_check():
     """Detailed health check"""
+    db_status = False
+    if DB_AVAILABLE:
+        try:
+            db = Database.get_db()
+            if db:
+                await db.command('ping')
+                db_status = True
+        except:
+            pass
+    
     return {
         "status": "healthy",
         "services": {
             "data_processor": data_processor is not None,
             "gst_engine": gst_engine is not None,
             "return_generator": return_generator is not None
+        },
+        "database": {
+            "available": DB_AVAILABLE,
+            "connected": db_status
+        },
+        "cloud_storage": {
+            "enabled": CloudStorage.is_enabled() if DB_AVAILABLE else False
         },
         "storage": {
             "temp_dir": str(TEMP_DIR),
@@ -217,16 +260,31 @@ async def upload_file(
         upload_id = str(uuid.uuid4())
         temp_path = TEMP_DIR / f"{upload_id}{file_ext}"
         
+        # Save file content
+        file_content = await file.read()
+        
         try:
             with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+                buffer.write(file_content)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to save file: {str(e)}"
             )
-        finally:
-            file.file.close()
+        
+        # Upload to Cloudinary if enabled
+        cloud_url = None
+        if DB_AVAILABLE and CloudStorage.is_enabled():
+            try:
+                cloud_result = await CloudStorage.upload_file(
+                    file_content,
+                    file.filename,
+                    folder=f"taxnow/{data_type}"
+                )
+                if cloud_result.get("success"):
+                    cloud_url = cloud_result.get("url")
+            except Exception as e:
+                print(f"Cloud upload failed (continuing with local): {e}")
         
         # Read the file
         try:
@@ -267,22 +325,64 @@ async def upload_file(
         if data_type == 'sales':
             df = gst_engine.classify_invoices(df)
             df = gst_engine.calculate_gst(df)
-            processed_data_store[upload_id] = {
-                "dataframe": df,
-                "filename": file.filename,
-                "platform": platform,
-                "upload_time": datetime.now().isoformat(),
-                "row_count": len(df)
-            }
+            
+            # Save to MongoDB if available
+            if DB_AVAILABLE and Database.get_db():
+                upload_data = {
+                    "filename": file.filename,
+                    "platform": platform,
+                    "data_type": data_type,
+                    "row_count": len(df),
+                    "cloud_url": cloud_url,
+                    "columns": list(df.columns)
+                }
+                mongo_id = await Database.save_upload(upload_data)
+                upload_id = mongo_id
+                
+                # Save invoices
+                invoices = df.to_dict(orient='records')
+                await Database.save_invoices(upload_id, invoices)
+                
+                # Save summary
+                summary = gst_engine.generate_summary(df)
+                await Database.save_summary(upload_id, summary)
+            else:
+                # Fallback to in-memory storage
+                processed_data_store[upload_id] = {
+                    "dataframe": df,
+                    "filename": file.filename,
+                    "platform": platform,
+                    "upload_time": datetime.now().isoformat(),
+                    "row_count": len(df)
+                }
         else:  # purchase
             df = gst_engine.calculate_itc(df)
-            purchase_data_store[upload_id] = {
-                "dataframe": df,
-                "filename": file.filename,
-                "platform": platform,
-                "upload_time": datetime.now().isoformat(),
-                "row_count": len(df)
-            }
+            
+            # Save to MongoDB if available
+            if DB_AVAILABLE and Database.get_db():
+                upload_data = {
+                    "filename": file.filename,
+                    "platform": platform,
+                    "data_type": data_type,
+                    "row_count": len(df),
+                    "cloud_url": cloud_url,
+                    "columns": list(df.columns)
+                }
+                mongo_id = await Database.save_upload(upload_data)
+                upload_id = mongo_id
+                
+                # Save invoices
+                invoices = df.to_dict(orient='records')
+                await Database.save_invoices(upload_id, invoices)
+            else:
+                # Fallback to in-memory storage
+                purchase_data_store[upload_id] = {
+                    "dataframe": df,
+                    "filename": file.filename,
+                    "platform": platform,
+                    "upload_time": datetime.now().isoformat(),
+                    "row_count": len(df)
+                }
         
         # Clean up temp file
         if temp_path.exists():
@@ -296,7 +396,8 @@ async def upload_file(
             "message": "File processed successfully",
             "rows_processed": len(df),
             "columns_detected": list(df.columns),
-            "preview": df.head(5).to_dict(orient='records')
+            "preview": df.head(5).to_dict(orient='records'),
+            "cloud_url": cloud_url
         }
         
     except HTTPException:
@@ -333,6 +434,20 @@ async def get_summary(upload_id: str):
             detail="Services not available"
         )
     
+    # Try MongoDB first
+    if DB_AVAILABLE and Database.get_db():
+        try:
+            summary = await Database.get_summary(upload_id)
+            if summary:
+                return {
+                    "success": True,
+                    "upload_id": upload_id,
+                    "summary": serialize_mongo_doc(summary)
+                }
+        except Exception as e:
+            print(f"MongoDB error: {e}")
+    
+    # Fallback to in-memory storage
     if upload_id not in processed_data_store:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -371,6 +486,27 @@ async def get_purchase_summary(upload_id: str):
             detail="Services not available"
         )
     
+    # Try MongoDB first
+    if DB_AVAILABLE and Database.get_db():
+        try:
+            upload = await Database.get_upload(upload_id)
+            if upload:
+                # Get invoices and calculate summary
+                invoices = await Database.get_invoices(upload_id, limit=10000)
+                if invoices:
+                    df = pd.DataFrame(invoices)
+                    summary = gst_engine.generate_itc_summary(df)
+                    return {
+                        "success": True,
+                        "upload_id": upload_id,
+                        "filename": upload.get("filename"),
+                        "platform": upload.get("platform", "unknown"),
+                        "summary": summary
+                    }
+        except Exception as e:
+            print(f"MongoDB error: {e}")
+    
+    # Fallback to in-memory storage
     if upload_id not in purchase_data_store:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -412,24 +548,39 @@ async def get_net_gst_payable(
             detail="Services not available"
         )
     
-    if sales_upload_id not in processed_data_store:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Sales upload ID not found."
-        )
-    
-    if purchase_upload_id not in purchase_data_store:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Purchase upload ID not found."
-        )
-    
     try:
-        sales_df = processed_data_store[sales_upload_id]["dataframe"]
-        purchase_df = purchase_data_store[purchase_upload_id]["dataframe"]
+        # Get sales summary
+        sales_summary = None
+        if DB_AVAILABLE and Database.get_db():
+            sales_summary = await Database.get_summary(sales_upload_id)
         
-        sales_summary = gst_engine.generate_summary(sales_df)
-        purchase_summary = gst_engine.generate_itc_summary(purchase_df)
+        if not sales_summary and sales_upload_id in processed_data_store:
+            sales_df = processed_data_store[sales_upload_id]["dataframe"]
+            sales_summary = gst_engine.generate_summary(sales_df)
+        
+        if not sales_summary:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sales upload ID not found."
+            )
+        
+        # Get purchase summary
+        purchase_summary = None
+        if DB_AVAILABLE and Database.get_db():
+            purchase_invoices = await Database.get_invoices(purchase_upload_id, limit=10000)
+            if purchase_invoices:
+                purchase_df = pd.DataFrame(purchase_invoices)
+                purchase_summary = gst_engine.generate_itc_summary(purchase_df)
+        
+        if not purchase_summary and purchase_upload_id in purchase_data_store:
+            purchase_df = purchase_data_store[purchase_upload_id]["dataframe"]
+            purchase_summary = gst_engine.generate_itc_summary(purchase_df)
+        
+        if not purchase_summary:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Purchase upload ID not found."
+            )
         
         net_payable = gst_engine.calculate_net_gst_payable(sales_summary, purchase_summary)
         
@@ -465,16 +616,26 @@ async def download_gst_return(
             detail="Services not available"
         )
     
-    if upload_id not in processed_data_store:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Upload ID not found. Please upload a file first."
-        )
+    # Try MongoDB first
+    df = None
+    if DB_AVAILABLE and Database.get_db():
+        try:
+            invoices = await Database.get_invoices(upload_id, limit=10000)
+            if invoices:
+                df = pd.DataFrame(invoices)
+        except Exception as e:
+            print(f"MongoDB error: {e}")
+    
+    # Fallback to in-memory storage
+    if df is None:
+        if upload_id not in processed_data_store:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Upload ID not found. Please upload a file first."
+            )
+        df = processed_data_store[upload_id]["dataframe"]
     
     try:
-        data = processed_data_store[upload_id]
-        df = data["dataframe"]
-        
         if return_type == 'gstr1':
             if format == 'excel':
                 output_path = TEMP_DIR / f"gstr1_return_{upload_id}.xlsx"
@@ -583,6 +744,28 @@ async def get_invoices(
     page_size: int = Query(50, ge=1, le=100)
 ):
     """Get paginated list of invoices"""
+    skip = (page - 1) * page_size
+    
+    # Try MongoDB first
+    if DB_AVAILABLE and Database.get_db():
+        try:
+            invoices = await Database.get_invoices(upload_id, invoice_type, skip, page_size)
+            total = await Database.count_invoices(upload_id, invoice_type)
+            
+            if invoices:
+                return {
+                    "success": True,
+                    "upload_id": upload_id,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (total + page_size - 1) // page_size,
+                    "invoices": [serialize_mongo_doc(inv) for inv in invoices]
+                }
+        except Exception as e:
+            print(f"MongoDB error: {e}")
+    
+    # Fallback to in-memory storage
     if upload_id not in processed_data_store:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -632,6 +815,51 @@ async def get_invoices(
 @app.get("/analytics/{upload_id}")
 async def get_analytics(upload_id: str):
     """Get detailed analytics for the uploaded data"""
+    # Try MongoDB first
+    if DB_AVAILABLE and Database.get_db():
+        try:
+            summary = await Database.get_summary(upload_id)
+            if summary:
+                summary = serialize_mongo_doc(summary)
+                
+                # Get invoices for charts
+                invoices = await Database.get_invoices(upload_id, limit=10000)
+                
+                analytics = {
+                    "summary": summary,
+                    "charts": {
+                        "tax_distribution": [
+                            {"name": "CGST", "value": summary['overall']['total_cgst']},
+                            {"name": "SGST", "value": summary['overall']['total_sgst']},
+                            {"name": "IGST", "value": summary['overall']['total_igst']}
+                        ],
+                        "invoice_type_distribution": [
+                            {"name": inv_type, "value": data['invoice_count']}
+                            for inv_type, data in summary['by_type'].items()
+                        ],
+                        "monthly_summary": summary.get('monthly_summary', [])
+                    },
+                    "top_states": sorted(
+                        summary.get('state_summary', []),
+                        key=lambda x: x['taxable_value'],
+                        reverse=True
+                    )[:5],
+                    "top_hsn": sorted(
+                        summary.get('hsn_summary', []),
+                        key=lambda x: x['taxable_value'],
+                        reverse=True
+                    )[:5]
+                }
+                
+                return {
+                    "success": True,
+                    "upload_id": upload_id,
+                    "analytics": analytics
+                }
+        except Exception as e:
+            print(f"MongoDB error: {e}")
+    
+    # Fallback to in-memory storage
     if upload_id not in processed_data_store:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
