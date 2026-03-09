@@ -7,7 +7,6 @@ import {
   AlertCircle,
   Calculator,
   ArrowLeft,
-  Download,
   ShoppingCart,
   Building2,
   Package,
