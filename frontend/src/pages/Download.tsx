@@ -7,7 +7,6 @@ import {
   CheckCircle,
   AlertCircle,
   FileText,
-  ChevronRight,
   Sparkles
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
