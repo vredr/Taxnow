@@ -4,22 +4,17 @@ import {
   ArrowLeft,
   FileText,
   Search,
-  Filter,
   ChevronLeft,
   ChevronRight,
-  Building2,
   MapPin,
-  Calendar,
-  IndianRupee,
-  Tag,
-  ArrowRight
+  Calendar
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Link, useNavigate } from 'react-router-dom'
-import { formatCurrency, formatNumber } from '@/lib/utils'
+import { Link } from 'react-router-dom'
+import { formatCurrency } from '@/lib/utils'
 import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://taxnow-production.up.railway.app'
@@ -49,9 +44,8 @@ const invoiceTypes = [
 ]
 
 export default function Invoices() {
-  const navigate = useNavigate()
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [loading, setLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -66,7 +60,7 @@ export default function Invoices() {
       return
     }
 
-    setLoading(true)
+    setIsLoading(true)
     setError(null)
 
     try {
@@ -84,7 +78,7 @@ export default function Invoices() {
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to fetch invoices.')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
