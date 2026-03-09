@@ -21,7 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 
 interface DashboardStats {
   totalUploads: number
@@ -32,8 +32,6 @@ interface DashboardStats {
   totalIGST: number
   totalTax: number
 }
-
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444']
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
