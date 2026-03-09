@@ -9,14 +9,11 @@ import {
   Package,
   Calendar,
   IndianRupee,
-  Activity,
-  ArrowUpRight,
-  ArrowDownRight
+  Activity
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import axios from 'axios'
 import { 
@@ -31,8 +28,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   AreaChart,
   Area
 } from 'recharts'
@@ -63,9 +58,8 @@ interface AnalyticsData {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#EC4899']
 
 export default function Analytics() {
-  const navigate = useNavigate()
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchAnalytics = async () => {
@@ -75,7 +69,7 @@ export default function Analytics() {
       return
     }
 
-    setLoading(true)
+    setIsLoading(true)
     setError(null)
 
     try {
@@ -84,7 +78,7 @@ export default function Analytics() {
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to fetch analytics.')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
@@ -230,7 +224,7 @@ export default function Analytics() {
                         paddingAngle={5}
                         dataKey="value"
                       >
-                        {analytics.charts.tax_distribution.map((entry, index) => (
+                        {analytics.charts.tax_distribution.map((_entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
