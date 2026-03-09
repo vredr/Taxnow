@@ -113,7 +113,7 @@ async def health_check():
     if DB_AVAILABLE:
         try:
             db = Database.get_db()
-            if db:
+            if db is not None:
                 await db.command('ping')
                 db_status = True
         except:
@@ -327,7 +327,7 @@ async def upload_file(
             df = gst_engine.calculate_gst(df)
             
             # Save to MongoDB if available
-            if DB_AVAILABLE and Database.get_db():
+            if DB_AVAILABLE and Database.get_db() is not None:
                 upload_data = {
                     "filename": file.filename,
                     "platform": platform,
@@ -359,7 +359,7 @@ async def upload_file(
             df = gst_engine.calculate_itc(df)
             
             # Save to MongoDB if available
-            if DB_AVAILABLE and Database.get_db():
+            if DB_AVAILABLE and Database.get_db() is not None:
                 upload_data = {
                     "filename": file.filename,
                     "platform": platform,
@@ -435,10 +435,10 @@ async def get_summary(upload_id: str):
         )
     
     # Try MongoDB first
-    if DB_AVAILABLE and Database.get_db():
+    if DB_AVAILABLE and Database.get_db() is not None:
         try:
             summary = await Database.get_summary(upload_id)
-            if summary:
+            if summary is not None:
                 return {
                     "success": True,
                     "upload_id": upload_id,
@@ -487,13 +487,13 @@ async def get_purchase_summary(upload_id: str):
         )
     
     # Try MongoDB first
-    if DB_AVAILABLE and Database.get_db():
+    if DB_AVAILABLE and Database.get_db() is not None:
         try:
             upload = await Database.get_upload(upload_id)
-            if upload:
+            if upload is not None:
                 # Get invoices and calculate summary
                 invoices = await Database.get_invoices(upload_id, limit=10000)
-                if invoices:
+                if invoices is not None and len(invoices) > 0:
                     df = pd.DataFrame(invoices)
                     summary = gst_engine.generate_itc_summary(df)
                     return {
@@ -551,10 +551,10 @@ async def get_net_gst_payable(
     try:
         # Get sales summary
         sales_summary = None
-        if DB_AVAILABLE and Database.get_db():
+        if DB_AVAILABLE and Database.get_db() is not None:
             sales_summary = await Database.get_summary(sales_upload_id)
         
-        if not sales_summary and sales_upload_id in processed_data_store:
+        if sales_summary is None and sales_upload_id in processed_data_store:
             sales_df = processed_data_store[sales_upload_id]["dataframe"]
             sales_summary = gst_engine.generate_summary(sales_df)
         
@@ -566,13 +566,13 @@ async def get_net_gst_payable(
         
         # Get purchase summary
         purchase_summary = None
-        if DB_AVAILABLE and Database.get_db():
+        if DB_AVAILABLE and Database.get_db() is not None:
             purchase_invoices = await Database.get_invoices(purchase_upload_id, limit=10000)
             if purchase_invoices:
                 purchase_df = pd.DataFrame(purchase_invoices)
                 purchase_summary = gst_engine.generate_itc_summary(purchase_df)
         
-        if not purchase_summary and purchase_upload_id in purchase_data_store:
+        if purchase_summary is None and purchase_upload_id in purchase_data_store:
             purchase_df = purchase_data_store[purchase_upload_id]["dataframe"]
             purchase_summary = gst_engine.generate_itc_summary(purchase_df)
         
@@ -618,10 +618,10 @@ async def download_gst_return(
     
     # Try MongoDB first
     df = None
-    if DB_AVAILABLE and Database.get_db():
+    if DB_AVAILABLE and Database.get_db() is not None:
         try:
             invoices = await Database.get_invoices(upload_id, limit=10000)
-            if invoices:
+            if invoices is not None and len(invoices) > 0:
                 df = pd.DataFrame(invoices)
         except Exception as e:
             print(f"MongoDB error: {e}")
@@ -747,12 +747,12 @@ async def get_invoices(
     skip = (page - 1) * page_size
     
     # Try MongoDB first
-    if DB_AVAILABLE and Database.get_db():
+    if DB_AVAILABLE and Database.get_db() is not None:
         try:
             invoices = await Database.get_invoices(upload_id, invoice_type, skip, page_size)
             total = await Database.count_invoices(upload_id, invoice_type)
             
-            if invoices:
+            if invoices is not None and len(invoices) > 0:
                 return {
                     "success": True,
                     "upload_id": upload_id,
@@ -816,10 +816,10 @@ async def get_invoices(
 async def get_analytics(upload_id: str):
     """Get detailed analytics for the uploaded data"""
     # Try MongoDB first
-    if DB_AVAILABLE and Database.get_db():
+    if DB_AVAILABLE and Database.get_db() is not None:
         try:
             summary = await Database.get_summary(upload_id)
-            if summary:
+            if summary is not None:
                 summary = serialize_mongo_doc(summary)
                 
                 # Get invoices for charts
