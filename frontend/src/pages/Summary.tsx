@@ -6,13 +6,11 @@ import {
   FileText,
   IndianRupee,
   Building2,
-  ShoppingCart,
   TrendingUp,
   PieChart as PieChartIcon,
   MapPin,
   Package,
   AlertCircle,
-  CheckCircle,
   Download
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,9 +31,7 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  LineChart,
-  Line
+  Cell
 } from 'recharts'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://taxnow-production.up.railway.app'
@@ -80,8 +76,6 @@ interface SummaryData {
     total_tax: number
   }>
 }
-
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#EC4899']
 
 export default function SummaryPage() {
   const navigate = useNavigate()
