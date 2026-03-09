@@ -9,7 +9,8 @@ import {
   Package,
   Calendar,
   IndianRupee,
-  Activity
+  Activity,
+  Loader2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -132,6 +133,13 @@ export default function Analytics() {
           </div>
         </div>
 
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Loading analytics...</span>
+          </div>
+        )}
+
         {error && (
           <Alert className="mb-6" variant="destructive">
             <AlertTitle>Error</AlertTitle>
@@ -139,7 +147,7 @@ export default function Analytics() {
           </Alert>
         )}
 
-        {analytics && (
+        {!isLoading && analytics && (
           <>
             {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

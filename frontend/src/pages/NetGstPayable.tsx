@@ -7,7 +7,8 @@ import {
   IndianRupee,
   ArrowRight,
   AlertCircle,
-  Receipt
+  Receipt,
+  Loader2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -122,6 +123,13 @@ export default function NetGstPayable() {
           </div>
         </div>
 
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Calculating GST...</span>
+          </div>
+        )}
+
         {error && (
           <Alert className="mb-6" variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -144,7 +152,7 @@ export default function NetGstPayable() {
           </Alert>
         )}
 
-        {netGstData && salesSummary && purchaseSummary && (
+        {!isLoading && netGstData && salesSummary && purchaseSummary && (
           <>
             {/* Calculation Flow */}
             <Card className="mb-6 shadow-md border-0">

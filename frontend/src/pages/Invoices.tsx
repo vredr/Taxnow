@@ -7,7 +7,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
-  Calendar
+  Calendar,
+  Loader2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -147,6 +148,13 @@ export default function Invoices() {
           </div>
         </div>
 
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Loading invoices...</span>
+          </div>
+        )}
+
         {error && (
           <Alert className="mb-6" variant="destructive">
             <AlertTitle>Error</AlertTitle>
@@ -154,7 +162,7 @@ export default function Invoices() {
           </Alert>
         )}
 
-        {!error && (
+        {!isLoading && !error && (
           <>
             {/* Filters */}
             <Card className="mb-6 shadow-md border-0">
