@@ -3,7 +3,7 @@
 A comprehensive GST automation SaaS platform for Indian businesses to manage GST returns, e-commerce data imports, and tax calculations.
 
 ## Live Demo
-- **Frontend:** https://taxnow.vercel.app
+- **Frontend:** 
 - **Backend API:** https://taxnow-production.up.railway.app
 
 ## Features
