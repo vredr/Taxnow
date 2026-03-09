@@ -5,15 +5,11 @@ import {
   TrendingUp,
   TrendingDown,
   IndianRupee,
-  Building2,
-  ShoppingCart,
   ArrowRight,
-  CheckCircle,
   AlertCircle,
-  Download,
   Receipt
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
@@ -35,7 +31,7 @@ export default function NetGstPayable() {
   const [netGstData, setNetGstData] = useState<NetGstData | null>(null)
   const [salesSummary, setSalesSummary] = useState<any>(null)
   const [purchaseSummary, setPurchaseSummary] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchNetGstPayable = async () => {
@@ -52,7 +48,7 @@ export default function NetGstPayable() {
       return
     }
 
-    setLoading(true)
+    setIsLoading(true)
     setError(null)
 
     try {
@@ -72,7 +68,7 @@ export default function NetGstPayable() {
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to calculate net GST payable.')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
